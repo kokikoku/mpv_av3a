@@ -1,0 +1,51 @@
+name: Build MPV Android ARMv7
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git wget curl unzip make cmake python3 ninja-build pkg-config yasm
+
+      - name: Setup Android NDK
+        run: |
+          # 下载并配置 Android NDK (推荐 NDK r27 或 r28)
+          wget -q https://google.com
+          unzip -q android-ndk-r27c-linux.zip
+          echo "NDK_HOME=$(pwd)/android-ndk-r27c" >> $GITHUB_ENV
+
+      - name: Prepare build environment
+        run: |
+          # 克隆编译脚本和 mpv 依赖
+          git clone https://github.com
+          cd mpv-android
+          # 初始化子模块并提取编译脚本
+          git submodule update --init --recursive
+
+      - name: Build Dependencies and MPV (ARMv7)
+        run: |
+          cd mpv-android/buildscripts
+          
+          # 指定架构为 ARMv7 (armeabi-v7a) 并设置 NDK 路径
+          export ARCH=armv7a
+          export NDK=$NDK_HOME
+          export API_LEVEL=21 # 最低支持 Android 5.0
+          
+          # 执行编译
+          ./buildall.sh --arch armv7a
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mpv-android-armv7a
+          path: mpv-android/app/build/outputs/apk/release/
