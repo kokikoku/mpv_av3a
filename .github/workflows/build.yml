@@ -1,4 +1,4 @@
-name: mpv-android ARMv7 + AV3A SINGLE APK
+name: mpv-android ARMv7 Build (Stable)
 
 on:
   workflow_dispatch:
@@ -22,14 +22,12 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y \
-            git wget unzip curl \
-            openjdk-17-jdk
+          sudo apt install -y git wget unzip curl openjdk-17-jdk
 
       ################################################
-      # 3. Android SDK (use GitHub default only)
+      # 3. Fix Android SDK env conflict
       ################################################
-      - name: Set Android SDK env (FIX CONFLICT)
+      - name: Set Android SDK
         run: |
           echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
@@ -44,30 +42,7 @@ jobs:
           git submodule update --init --recursive
 
       ################################################
-      # 5. Inject AV3A decoder
-      ################################################
-      - name: Inject AV3A
-        run: |
-          cd mpv-android
-          mkdir -p buildscripts/ffmpeg/libavcodec
-          git clone https://github.com/nilaoda/av3a_decoder \
-            buildscripts/ffmpeg/libavcodec/av3a_decoder || true
-
-      ################################################
-      # 6. FORCE SINGLE APK (NO YAML / NO EOF / SAFE PATCH)
-      ################################################
-      - name: Force single APK (NO EOF SAFE MODE)
-        run: |
-          cd mpv-android
-
-          # 删除可能存在的 split 配置（避免冲突）
-          sed -i '/splits {/,/}/d' app/build.gradle || true
-
-          # 用安全追加方式写入
-          printf "\nandroid {\n    splits {\n        abi {\n            enable false\n        }\n    }\n}\n" >> app/build.gradle
-
-      ################################################
-      # 7. Build APK (Gradle ONLY)
+      # 5. Build APK (NO PATCH / NO YAML HACK)
       ################################################
       - name: Build APK
         run: |
@@ -78,18 +53,17 @@ jobs:
           ./gradlew assembleDebug
 
       ################################################
-      # 8. Show output APK
+      # 6. Show outputs
       ################################################
-      - name: List APK files
+      - name: List APK
         run: |
-          find mpv-android -name "*.apk"
+          find mpv-android -name "*.apk" -type f
 
       ################################################
-      # 9. Upload artifact
+      # 7. Upload APK
       ################################################
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: mpv-armv7-av3a-single-apk
-          path: |
-            mpv-android/**/app/build/outputs/apk/**/*.apk
+          name: mpv-armv7-apk
+          path: mpv-android/**/app/build/outputs/apk/**/*.apk
