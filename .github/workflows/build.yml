@@ -57,22 +57,20 @@ jobs:
       ################################################
       # 6. FORCE SINGLE APK CONFIG (关键修复)
       ################################################
-      - name: Force single APK build config
-        run: |
-          cd mpv-android
+- name: Force single APK (safe patch)
+  run: |
+    cd mpv-android
 
-          cat >> app/build.gradle << 'EOF'
+    # 删除旧 split 配置（如果存在）
+    sed -i '/splits {/,/}/d' app/build.gradle || true
+
+    # 强制追加安全单APK配置
+    cat >> app/build.gradle << 'EOF'
 
 android {
     splits {
         abi {
             enable false
-        }
-    }
-
-    bundle {
-        abi {
-            enableSplit = false
         }
     }
 }
