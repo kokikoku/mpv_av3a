@@ -1,4 +1,4 @@
-name: mpv-android ARMv7 + AV3A Stable
+name: mpv-android ARMv7 AV3A SINGLE APK
 
 on:
   workflow_dispatch:
@@ -8,81 +8,101 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      ############################################
+      ################################################
       # 1. Checkout
-      ############################################
+      ################################################
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      ############################################
-      # 2. Base dependencies
-      ############################################
+      ################################################
+      # 2. Base deps
+      ################################################
       - name: Install dependencies
         run: |
           sudo apt update
           sudo apt install -y \
-            git build-essential python3 \
-            wget unzip curl \
+            git wget unzip curl \
             openjdk-17-jdk
 
-      ############################################
-      # 3. USE GitHub Android SDK ONLY (IMPORTANT FIX)
-      ############################################
-      - name: Fix Android SDK environment (NO CONFLICT)
+      ################################################
+      # 3. Use ONLY GitHub Android SDK (no conflict)
+      ################################################
+      - name: Fix Android SDK env
         run: |
           echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
 
-          # 强制确保只用一个SDK来源
-          unset ANDROID_SDK_ROOT || true
-
-      ############################################
+      ################################################
       # 4. Clone mpv-android
-      ############################################
+      ################################################
       - name: Clone mpv-android
         run: |
           git clone --recursive https://github.com/mpv-android/mpv-android.git
           cd mpv-android
           git submodule update --init --recursive
 
-      ############################################
-      # 5. Inject AV3A decoder into FFmpeg
-      ############################################
-      - name: Inject AV3A codec
+      ################################################
+      # 5. Inject AV3A decoder
+      ################################################
+      - name: Inject AV3A
         run: |
           cd mpv-android
-
           mkdir -p buildscripts/ffmpeg/libavcodec
 
           git clone https://github.com/nilaoda/av3a_decoder \
             buildscripts/ffmpeg/libavcodec/av3a_decoder || true
 
-      ############################################
-      # 6. Verify Gradle wrapper
-      ############################################
-      - name: Prepare Gradle
+      ################################################
+      # 6. FORCE SINGLE APK CONFIG (关键修复)
+      ################################################
+      - name: Force single APK build config
+        run: |
+          cd mpv-android
+
+          cat >> app/build.gradle << 'EOF'
+
+android {
+    splits {
+        abi {
+            enable false
+        }
+    }
+
+    bundle {
+        abi {
+            enableSplit = false
+        }
+    }
+}
+EOF
+
+      ################################################
+      # 7. Build APK (DEBUG but single)
+      ################################################
+      - name: Build single APK
         run: |
           cd mpv-android
           chmod +x gradlew
 
-      ############################################
-      # 7. Build APK (ARMv7)
-      ############################################
-      - name: Build APK
-        run: |
-          cd mpv-android
-
           ./gradlew clean
           ./gradlew assembleDebug
 
-      ############################################
-      # 8. Upload APK artifact
-      ############################################
+      ################################################
+      # 8. Verify output (IMPORTANT)
+      ################################################
+      - name: Check APK output
+        run: |
+          find mpv-android -name "*.apk" -type f
+          ls -lh mpv-android/**/build/outputs/apk/** || true
+
+      ################################################
+      # 9. Upload SINGLE APK
+      ################################################
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: mpv-armv7-av3a-apk
+          name: mpv-armv7-av3a-single-apk
           path: |
-            mpv-android/**/*.apk
+            mpv-android/**/app/build/outputs/apk/**/*.apk
