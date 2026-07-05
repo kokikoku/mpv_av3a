@@ -1,0 +1,69 @@
+name: mpv-android ARMv7 Build (Stable)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      ################################################
+      # 1. Checkout
+      ################################################
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      ################################################
+      # 2. Install dependencies
+      ################################################
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y git wget unzip curl openjdk-17-jdk
+
+      ################################################
+      # 3. Fix Android SDK env conflict
+      ################################################
+      - name: Set Android SDK
+        run: |
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+
+      ################################################
+      # 4. Clone mpv-android
+      ################################################
+      - name: Clone mpv-android
+        run: |
+          git clone --recursive https://github.com/mpv-android/mpv-android.git
+          cd mpv-android
+          git submodule update --init --recursive
+
+      ################################################
+      # 5. Build APK (NO PATCH / NO YAML HACK)
+      ################################################
+      - name: Build APK
+        run: |
+          cd mpv-android
+          chmod +x gradlew
+
+          ./gradlew clean
+          ./gradlew assembleDebug
+
+      ################################################
+      # 6. Show outputs
+      ################################################
+      - name: List APK
+        run: |
+          find mpv-android -name "*.apk" -type f
+
+      ################################################
+      # 7. Upload APK
+      ################################################
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: mpv-armv7-apk
+          path: mpv-android/**/app/build/outputs/apk/**/*.apk
