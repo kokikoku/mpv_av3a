@@ -56,7 +56,7 @@ jobs:
       ################################################
       # 6. FORCE SINGLE APK (NO YAML / NO EOF / SAFE PATCH)
       ################################################
-      - name: Force single APK build
+      - name: Force single APK (NO EOF SAFE MODE)
         run: |
           cd mpv-android
 
