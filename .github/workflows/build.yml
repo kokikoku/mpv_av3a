@@ -1,4 +1,4 @@
-name: mpv-android ARMv7 + AV3A
+name: mpv-android ARMv7 + AV3A Stable Build
 
 on:
   workflow_dispatch:
@@ -8,24 +8,27 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      ########################################
+      # 1. Checkout
+      ########################################
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      ####################################
-      # 1. Dependencies
-      ####################################
-      - name: Install deps
+      ########################################
+      # 2. Base dependencies
+      ########################################
+      - name: Install dependencies
         run: |
           sudo apt update
           sudo apt install -y \
             git build-essential python3 \
             cmake ninja-build meson \
-            nasm yasm curl wget unzip \
-            openjdk-17-jdk
+            pkg-config curl wget unzip \
+            nasm yasm openjdk-17-jdk
 
-      ####################################
-      # 2. Android SDK/NDK
-      ####################################
+      ########################################
+      # 3. Android NDK (fixed)
+      ########################################
       - name: Install Android NDK
         run: |
           mkdir -p $HOME/android
@@ -37,42 +40,71 @@ jobs:
           echo "NDK=$HOME/android/android-ndk-r25c" >> $GITHUB_ENV
           echo "TOOLCHAIN=$HOME/android/android-ndk-r25c/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
 
-      ####################################
-      # 3. mpv-android source
-      ####################################
+      ########################################
+      # 4. Clone mpv-android (FULL SAFE MODE)
+      ########################################
       - name: Clone mpv-android
         run: |
           git clone --recursive https://github.com/mpv-android/mpv-android.git
+          cd mpv-android
 
-      ####################################
-      # 4. Patch FFmpeg (AV3A)
-      ####################################
+          # 防止 submodule 漏
+          git submodule update --init --recursive
+
+      ########################################
+      # 5. Inject AV3A into FFmpeg
+      ########################################
       - name: Inject AV3A decoder
         run: |
           cd mpv-android
 
+          mkdir -p buildscripts/ffmpeg/libavcodec
+
           git clone https://github.com/nilaoda/av3a_decoder \
             buildscripts/ffmpeg/libavcodec/av3a_decoder || true
 
-      ####################################
-      # 5. Build ARMv7 APK
-      ####################################
-      - name: Build APK
+      ########################################
+      # 6. FIX: Find correct build entry (IMPORTANT)
+      ########################################
+      - name: Detect build script
+        run: |
+          cd mpv-android
+
+          echo "=== Available scripts ==="
+          find . -maxdepth 3 -type f -name "*.sh"
+
+          echo "=== build scripts ==="
+          ls -la
+
+      ########################################
+      # 7. Build ARMv7 APK (SAFE ENTRY)
+      ########################################
+      - name: Build APK (ARMv7)
         run: |
           cd mpv-android
 
           export ANDROID_NDK=$NDK
+          export PATH=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
 
-          ./buildall.sh \
-            armv7a \
-            release
+          # ⚠️ 关键修复：不同版本mpv-android入口不同
+          if [ -f "./buildall.sh" ]; then
+              chmod +x buildall.sh
+              ./buildall.sh armv7a release
+          elif [ -f "./scripts/build-android.sh" ]; then
+              chmod +x scripts/build-android.sh
+              ./scripts/build-android.sh armv7a
+          else
+              echo "❌ No valid build entry found"
+              exit 127
+          fi
 
-      ####################################
-      # 6. Upload APK
-      ####################################
+      ########################################
+      # 8. Upload APK artifacts
+      ########################################
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: mpv-armv7-av3a-apk
           path: |
-            mpv-android/build/outputs/**/*.apk
+            mpv-android/**/*.apk
+            mpv-android/build/**/*.apk
