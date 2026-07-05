@@ -1,4 +1,4 @@
-name: mpv-android ARMv7 AV3A (Stable Gradle Build)
+name: mpv-android ARMv7 + AV3A Stable
 
 on:
   workflow_dispatch:
@@ -8,55 +8,81 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      ############################################
+      # 1. Checkout
+      ############################################
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Install deps
+      ############################################
+      # 2. Base dependencies
+      ############################################
+      - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y git wget unzip openjdk-17-jdk
+          sudo apt install -y \
+            git build-essential python3 \
+            wget unzip curl \
+            openjdk-17-jdk
 
-      - name: Install Android SDK (cmdline tools)
+      ############################################
+      # 3. USE GitHub Android SDK ONLY (IMPORTANT FIX)
+      ############################################
+      - name: Fix Android SDK environment (NO CONFLICT)
         run: |
-          mkdir -p $HOME/android-sdk
-          cd $HOME/android-sdk
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
 
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-          unzip -q commandlinetools-linux-*.zip
+          # 强制确保只用一个SDK来源
+          unset ANDROID_SDK_ROOT || true
 
-          mkdir -p cmdline-tools/latest
-          mv cmdline-tools/* cmdline-tools/latest/ || true
-
-          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
-          echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
-
-      - name: Install SDK packages
-        run: |
-          yes | sdkmanager --licenses || true
-          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
-
+      ############################################
+      # 4. Clone mpv-android
+      ############################################
       - name: Clone mpv-android
         run: |
           git clone --recursive https://github.com/mpv-android/mpv-android.git
+          cd mpv-android
+          git submodule update --init --recursive
 
-      - name: Inject AV3A
+      ############################################
+      # 5. Inject AV3A decoder into FFmpeg
+      ############################################
+      - name: Inject AV3A codec
         run: |
           cd mpv-android
+
           mkdir -p buildscripts/ffmpeg/libavcodec
+
           git clone https://github.com/nilaoda/av3a_decoder \
             buildscripts/ffmpeg/libavcodec/av3a_decoder || true
 
-      - name: Build with Gradle (NO 127 POSSIBLE)
+      ############################################
+      # 6. Verify Gradle wrapper
+      ############################################
+      - name: Prepare Gradle
         run: |
           cd mpv-android
           chmod +x gradlew
 
+      ############################################
+      # 7. Build APK (ARMv7)
+      ############################################
+      - name: Build APK
+        run: |
+          cd mpv-android
+
+          ./gradlew clean
           ./gradlew assembleDebug
 
+      ############################################
+      # 8. Upload APK artifact
+      ############################################
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: mpv-armv7-av3a-apk
-          path: mpv-android/**/*.apk
+          path: |
+            mpv-android/**/*.apk
