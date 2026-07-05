@@ -1,4 +1,4 @@
-name: mpv-android ARMv7 + AV3A Stable Build
+name: mpv-android ARMv7 AV3A (Stable Gradle Build)
 
 on:
   workflow_dispatch:
@@ -8,103 +8,55 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      ########################################
-      # 1. Checkout
-      ########################################
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-      ########################################
-      # 2. Base dependencies
-      ########################################
-      - name: Install dependencies
+      - name: Install deps
         run: |
           sudo apt update
-          sudo apt install -y \
-            git build-essential python3 \
-            cmake ninja-build meson \
-            pkg-config curl wget unzip \
-            nasm yasm openjdk-17-jdk
+          sudo apt install -y git wget unzip openjdk-17-jdk
 
-      ########################################
-      # 3. Android NDK (fixed)
-      ########################################
-      - name: Install Android NDK
+      - name: Install Android SDK (cmdline tools)
         run: |
-          mkdir -p $HOME/android
-          cd $HOME/android
+          mkdir -p $HOME/android-sdk
+          cd $HOME/android-sdk
 
-          wget -q https://dl.google.com/android/repository/android-ndk-r25c-linux.zip
-          unzip -q android-ndk-r25c-linux.zip
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q commandlinetools-linux-*.zip
 
-          echo "NDK=$HOME/android/android-ndk-r25c" >> $GITHUB_ENV
-          echo "TOOLCHAIN=$HOME/android/android-ndk-r25c/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
+          mkdir -p cmdline-tools/latest
+          mv cmdline-tools/* cmdline-tools/latest/ || true
 
-      ########################################
-      # 4. Clone mpv-android (FULL SAFE MODE)
-      ########################################
+          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+
+      - name: Install SDK packages
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
       - name: Clone mpv-android
         run: |
           git clone --recursive https://github.com/mpv-android/mpv-android.git
-          cd mpv-android
 
-          # 防止 submodule 漏
-          git submodule update --init --recursive
-
-      ########################################
-      # 5. Inject AV3A into FFmpeg
-      ########################################
-      - name: Inject AV3A decoder
+      - name: Inject AV3A
         run: |
           cd mpv-android
-
           mkdir -p buildscripts/ffmpeg/libavcodec
-
           git clone https://github.com/nilaoda/av3a_decoder \
             buildscripts/ffmpeg/libavcodec/av3a_decoder || true
 
-      ########################################
-      # 6. FIX: Find correct build entry (IMPORTANT)
-      ########################################
-      - name: Detect build script
+      - name: Build with Gradle (NO 127 POSSIBLE)
         run: |
           cd mpv-android
+          chmod +x gradlew
 
-          echo "=== Available scripts ==="
-          find . -maxdepth 3 -type f -name "*.sh"
+          ./gradlew assembleDebug
 
-          echo "=== build scripts ==="
-          ls -la
-
-      ########################################
-      # 7. Build ARMv7 APK (SAFE ENTRY)
-      ########################################
-      - name: Build APK (ARMv7)
-        run: |
-          cd mpv-android
-
-          export ANDROID_NDK=$NDK
-          export PATH=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
-
-          # ⚠️ 关键修复：不同版本mpv-android入口不同
-          if [ -f "./buildall.sh" ]; then
-              chmod +x buildall.sh
-              ./buildall.sh armv7a release
-          elif [ -f "./scripts/build-android.sh" ]; then
-              chmod +x scripts/build-android.sh
-              ./scripts/build-android.sh armv7a
-          else
-              echo "❌ No valid build entry found"
-              exit 127
-          fi
-
-      ########################################
-      # 8. Upload APK artifacts
-      ########################################
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: mpv-armv7-av3a-apk
-          path: |
-            mpv-android/**/*.apk
-            mpv-android/build/**/*.apk
+          path: mpv-android/**/*.apk
