@@ -1,4 +1,4 @@
-name: mpv-android ARMv7 AV3A SINGLE APK
+name: mpv-android ARMv7 + AV3A SINGLE APK
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ jobs:
           submodules: recursive
 
       ################################################
-      # 2. Base deps
+      # 2. Install dependencies
       ################################################
       - name: Install dependencies
         run: |
@@ -27,9 +27,9 @@ jobs:
             openjdk-17-jdk
 
       ################################################
-      # 3. Use ONLY GitHub Android SDK (no conflict)
+      # 3. Android SDK (use GitHub default only)
       ################################################
-      - name: Fix Android SDK env
+      - name: Set Android SDK env (FIX CONFLICT)
         run: |
           echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
@@ -50,36 +50,26 @@ jobs:
         run: |
           cd mpv-android
           mkdir -p buildscripts/ffmpeg/libavcodec
-
           git clone https://github.com/nilaoda/av3a_decoder \
             buildscripts/ffmpeg/libavcodec/av3a_decoder || true
 
       ################################################
-      # 6. FORCE SINGLE APK CONFIG (关键修复)
+      # 6. FORCE SINGLE APK (NO YAML / NO EOF / SAFE PATCH)
       ################################################
-- name: Force single APK (safe patch)
-  run: |
-    cd mpv-android
+      - name: Force single APK build
+        run: |
+          cd mpv-android
 
-    # 删除旧 split 配置（如果存在）
-    sed -i '/splits {/,/}/d' app/build.gradle || true
+          # 删除可能存在的 split 配置（避免冲突）
+          sed -i '/splits {/,/}/d' app/build.gradle || true
 
-    # 强制追加安全单APK配置
-    cat >> app/build.gradle << 'EOF'
-
-android {
-    splits {
-        abi {
-            enable false
-        }
-    }
-}
-EOF
+          # 用安全追加方式写入
+          printf "\nandroid {\n    splits {\n        abi {\n            enable false\n        }\n    }\n}\n" >> app/build.gradle
 
       ################################################
-      # 7. Build APK (DEBUG but single)
+      # 7. Build APK (Gradle ONLY)
       ################################################
-      - name: Build single APK
+      - name: Build APK
         run: |
           cd mpv-android
           chmod +x gradlew
@@ -88,15 +78,14 @@ EOF
           ./gradlew assembleDebug
 
       ################################################
-      # 8. Verify output (IMPORTANT)
+      # 8. Show output APK
       ################################################
-      - name: Check APK output
+      - name: List APK files
         run: |
-          find mpv-android -name "*.apk" -type f
-          ls -lh mpv-android/**/build/outputs/apk/** || true
+          find mpv-android -name "*.apk"
 
       ################################################
-      # 9. Upload SINGLE APK
+      # 9. Upload artifact
       ################################################
       - name: Upload APK
         uses: actions/upload-artifact@v4
